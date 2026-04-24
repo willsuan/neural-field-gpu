@@ -9,6 +9,15 @@ equations.
 Final project for COE 379 (Parallel Programming in MPI and OpenMP),
 Spring 2026 -- Will Suan (whs726 / wsuan), TACC Frontera.
 
+<p align="center">
+  <video src="https://github.com/willsuan/neural-field-gpu/raw/main/media/spirals.mp4"
+         controls width="640" autoplay loop muted playsinline>
+    Demo video: spirals regime (10s, 1024x1024 grid).
+  </video>
+</p>
+
+Full writeup (design, performance, references): [docs/writeup.md](docs/writeup.md).
+
 ## What it does
 
 Solves the two-population Wilson-Cowan equations on a periodic 2D grid:
