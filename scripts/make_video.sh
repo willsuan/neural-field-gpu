@@ -13,8 +13,9 @@ if ! command -v ffmpeg >/dev/null 2>&1; then
   exit 1
 fi
 
-ffmpeg -y -framerate "${FPS}" -i "${DIR}/frame_%05d.ppm" \
+ffmpeg -nostdin -hide_banner -loglevel warning -stats \
+       -y -framerate "${FPS}" -i "${DIR}/frame_%05d.ppm" \
        -c:v libx264 -pix_fmt yuv420p -crf 18 -preset slow \
-       "${OUT}"
+       "${OUT}" < /dev/null
 
 echo "wrote ${OUT}"
