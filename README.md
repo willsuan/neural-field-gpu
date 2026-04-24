@@ -6,7 +6,8 @@ spontaneously produces the geometric hallucination patterns (spirals,
 tunnels, lattices) derived by Ermentrout & Cowan (1979) from the same
 equations.
 
-COE 379 final project, Spring 2026 -- Will Suan (whs726 / wsuan).
+Final project for COE 379 (Parallel Programming in MPI and OpenMP),
+Spring 2026 -- Will Suan (whs726 / wsuan), TACC Frontera.
 
 ## What it does
 
@@ -29,7 +30,7 @@ Quadro RTX 5000, a 1024x1024 run does ~30-80 steps/sec depending on stride.
 ## Layout
 
 ```
-project/
+neural-field-gpu/
   CMakeLists.txt
   src/
     main.cu          # driver, time loop, cuFFT setup
@@ -39,9 +40,10 @@ project/
     build_local.sh   # configure + build (interactive / idev)
     job_single.sh    # SLURM: one preset on one GPU
     job_sweep.sh     # SLURM: four presets in parallel, one per GPU
+    smoke_test.sh    # SLURM: short build+run for feedback
     make_video.sh    # ffmpeg wrapper: PPM frames -> mp4
   configs/           # (room for extended parameter files)
-  proposal.md        # original project proposal
+  proposal.md        # project proposal
   README.md          # this file
 ```
 
