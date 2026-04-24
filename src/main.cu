@@ -181,8 +181,13 @@ int main(int argc, char **argv) {
   std::printf("\ntotal         : %.2f s  (%d steps, %d frames)\n", ms * 1e-3,
               p.nsteps, frame_id);
   std::printf("per step avg  : %.3f ms\n", step_ms);
-  std::printf("throughput    : %.2f Mcells/s\n",
-              (double)n_real / (step_ms * 1e3));
+  const double throughput_Gcell_s =
+      (double)n_real / (step_ms * 1.0e6);  // cells per ms -> Gcells/s
+  std::printf("throughput    : %.2f Gcells/s\n", throughput_Gcell_s);
+
+  // machine-readable summary line for benchmark post-processing
+  std::printf("CSV,%d,%d,%d,%.6f,%.6f,%.6f\n", Nx, Ny, p.nsteps, ms * 1e-3,
+              step_ms, throughput_Gcell_s);
 
   // ---- cleanup -------------------------------------------------------------
   cufftDestroy(plan_r2c);
