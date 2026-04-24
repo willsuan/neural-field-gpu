@@ -43,6 +43,9 @@ neural-field-gpu/
     smoke_test.sh    # SLURM: short build+run for feedback
     make_video.sh    # ffmpeg wrapper: PPM frames -> mp4
   configs/           # (room for extended parameter files)
+  docs/
+    writeup.md       # project writeup (design, performance, discussion)
+  media/             # curated demo videos and frames
   proposal.md        # project proposal
   README.md          # this file
 ```

@@ -20,6 +20,14 @@ smoke_frames/
 *.jpg
 *.jpeg
 
+# allow curated demo assets under media/ and docs/
+!media/*.mp4
+!media/*.mov
+!media/*.png
+!media/*.jpg
+!docs/**/*.png
+!docs/**/*.jpg
+
 # reports
 smoke_report_*.tar.gz
 *.tar.gz
