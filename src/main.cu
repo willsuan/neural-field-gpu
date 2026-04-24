@@ -25,7 +25,6 @@
 #include <cuda_runtime.h>
 #include <cufft.h>
 #include <chrono>
-#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -123,7 +122,15 @@ int main(int argc, char **argv) {
   }
 
   // ---- output directory ----------------------------------------------------
-  std::filesystem::create_directories(p.out_dir);
+  // belt-and-suspenders: the shell scripts already mkdir the out dir, but
+  // run the binary standalone and this keeps it self-sufficient.  Shell-out
+  // avoids a C++17 <filesystem>/libstdc++fs link dependency on GCC 8.
+  {
+    std::string cmd = "mkdir -p \"" + p.out_dir + "\"";
+    if (std::system(cmd.c_str()) != 0) {
+      std::fprintf(stderr, "warning: mkdir -p %s failed\n", p.out_dir.c_str());
+    }
+  }
 
   // ---- time loop -----------------------------------------------------------
   const float norm = 1.0f / (float)(n_real);
