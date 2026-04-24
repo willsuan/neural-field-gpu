@@ -1,0 +1,32 @@
+# build artifacts
+build/
+*.o
+*.obj
+
+# slurm / run output
+logs/
+frames/
+smoke_frames/
+*.out
+*.err
+*.log
+
+# video + image output
+*.mp4
+*.mov
+*.ppm
+*.pgm
+*.png
+*.jpg
+*.jpeg
+
+# reports
+smoke_report_*.tar.gz
+*.tar.gz
+
+# editor / OS cruft
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*~
