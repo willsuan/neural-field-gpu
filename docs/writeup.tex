@@ -60,11 +60,17 @@
   equations on a periodic 2D grid with FFT-based spatial coupling via
   NVIDIA cuFFT and forward Euler time integration, running on the
   Quadro RTX 5000 GPUs of a Frontera \texttt{rtx-dev} node. I measure
-  per-step cost and throughput across grid sizes from $128^2$ to $4096^2$,
-  compare the measured scaling to the theoretical $O(N^{2} \log N)$ cost
-  of the FFT-based kernel, and report near-linear speedup of an
-  embarrassingly parallel 4-GPU parameter sweep. A \SI{10}{\second}
-  video of the ``spirals'' regime is attached to the repository
+  per-step cost and throughput across grid sizes from $128^{2}$ to
+  $4096^{2}$ and find that throughput peaks at $N = 512$ at
+  \SI{3.11}{Gcell/s}, holds at \SI{3.06}{Gcell/s} at $N = 1024$, and
+  drops gracefully to \SI{2.51}{Gcell/s} at $N = 4096$ as the cuFFT
+  algorithm transitions out of its in-kernel regime. The per-step cost
+  scales as $O(N^{2} \log N)$ across more than four grid doublings, as
+  predicted by the FFT complexity. An embarrassingly parallel four-GPU
+  parameter sweep on a single Frontera RTX node delivers about 80\,\%
+  aggregate efficiency, with a measurable contention attributable to
+  shared host-side resources. A \SI{10}{\second} video of the
+  ``spirals'' regime is attached to the repository
   (\url{https://github.com/willsuan/neural-field-gpu}).
 \end{abstract}
 
@@ -426,11 +432,19 @@ Scripts: \texttt{scripts/benchmark.sh} (SLURM submission) and
 
 Figure~\ref{fig:throughput} shows the measured throughput in
 billion cell updates per second (\si{Gcell/s}) as a function of the
-grid side $N$. Figure~\ref{fig:timestep} plots the same data as cost
+grid side $N$. Throughput rises sharply from
+\SI{0.52}{Gcell/s} at $N = 128$ to a peak of \SI{3.11}{Gcell/s} at
+$N = 512$, holds within a few percent of the peak at $N = 1024$
+(\SI{3.06}{Gcell/s}), and then declines gently to \SI{2.51}{Gcell/s}
+at $N = 4096$. The non-monotonic behavior is discussed below.
+
+Figure~\ref{fig:timestep} plots the same data as cost
 per time step on a log-log axis, against an $O(N^{2} \log N)$
 reference line fitted at $N = 4096$. The measured points lie close to
 the reference curve across more than four doublings of $N$,
-confirming the expected FFT-based asymptotics.
+confirming the expected FFT-based asymptotics. The deviation at small
+$N$ (where the measured cost is higher than the reference) is due to
+fixed kernel-launch overhead becoming the dominant term in the budget.
 
 \begin{figure}[h]
   \centering
@@ -456,32 +470,47 @@ At small $N$ the throughput is limited by fixed per-kernel-launch
 overhead --- each time step issues seven GPU launches (two R2C FFTs,
 two C2R FFTs, two pointwise multiplies, one update), each with a
 launch latency of a few microseconds. At $N = 128$ the per-step cost
-is already dominated by launch overhead, and the GPU is not fully
-occupied. At $N \geq 1024$ the GPU is occupation-bound and the curve
-follows the FFT complexity.
+of \SI{31}{\micro\second} is dominated by launch overhead and the
+\num{16384} cells are insufficient to fill the 3072 CUDA cores of
+the RTX 5000. At $N \geq 512$ the GPU is occupation-bound and the
+curve enters the FFT-asymptotic regime.
 
 \subsection{Multi-GPU concurrent parameter sweep}
 
 Figure~\ref{fig:multigpu} shows wall time and effective aggregate
 speedup for the 4-GPU parameter sweep, running 1, 2, and 4 independent
-$1024^{2}$ simulations concurrently. Wall time is essentially
-constant, and effective speedup is near linear --- because the four
-Quadro RTX 5000 GPUs sit on independent PCIe segments and share no
-compute or memory, and the CUDA runtime serializes launches per GPU
-only. The tiny residual slowdown with $K = 4$ (a few percent) is
-attributable to shared host-side overhead, in particular the PCIe
-copy path for frame output and the cuFFT plan creation that each
-process incurs at startup.
+$1024^{2}$ simulations concurrently. Wall time grows from
+\SI{1.58}{\second} at $K = 1$ to \SI{1.96}{\second} at $K = 4$ ---
+a per-process slowdown of about 24\,\% when the four GPUs are
+saturated. The corresponding aggregate speedup is
+$K T_{1}/T_{K} = 3.22$ at $K = 4$, i.e. about 80\,\% of the ideal
+$4\times$. The two-GPU efficiency is much better, at about 91\,\%.
 
 \begin{figure}[h]
   \centering
   \includegraphics[width=\linewidth]{figures/multi_gpu_scaling}
   \caption{Multi-GPU embarrassingly parallel sweep on a single
-  Frontera RTX node. (a) Wall time is flat: running $K$ independent
-  simulations takes the same time as running one. (b) Effective
-  aggregate speedup $K T_{1}/T_{K}$ tracks the ideal linear line.}
+  Frontera RTX node. (a) Wall time grows modestly from
+  \SI{1.58}{\second} at $K = 1$ to \SI{1.96}{\second} at $K = 4$.
+  (b) Effective aggregate speedup $K T_{1}/T_{K}$: 1.83$\times$ on
+  two GPUs (91\,\% efficiency) and 3.22$\times$ on four GPUs
+  (80\,\% efficiency), versus the linear-ideal reference.}
   \label{fig:multigpu}
 \end{figure}
+
+The deviation from the ideal $4\times$ is meaningful and worth
+unpacking. The four Quadro RTX 5000 GPUs sit on independent PCIe
+segments, but they share several host-side resources: a single
+CPU socket runs the four user processes, the cuFFT plan-creation
+path serializes on the CUDA driver, and the four processes contend
+for L3 cache and DRAM bandwidth on the host while marshaling launch
+arguments. Inspection of the per-process logs shows that the
+\emph{steady-state} per-step time is unchanged (it remains
+\SI{0.343}{\milli\second}); the slowdown is concentrated at startup,
+where four cuFFT plans are built simultaneously rather than one. A
+longer-running simulation would show better aggregate efficiency
+than this benchmark, because the fixed startup cost gets amortized
+over more steps.
 
 \subsection{Qualitative validation: the four regimes}
 
@@ -516,18 +545,27 @@ Three predictions were made before the measurements:
   of $N$.
   \item \emph{Throughput is memory-bandwidth-bound, not compute-bound.}
   Consistent with the measurements: at $N = 1024$ the measured
-  \SI{1.86}{Gcell/s} corresponds to a cell being read and written a
-  handful of times per step. The traffic from the four cuFFT calls
-  alone reads and writes roughly $6 \times 4$ \si{MB} per step, which
-  at \SI{0.56}{\milli\second} per step is \SI{43}{GB/s} of useful
-  bandwidth --- a small fraction of the \SI{448}{GB/s} peak, but in
-  line with published cuFFT bandwidth at these sizes~\cite{cufft}.
-  The remainder of the bandwidth budget is consumed by the un-fused
-  pointwise kernels between the transforms, which is where a future
-  optimization would focus (see section~\ref{sec:future}).
+  \SI{3.06}{Gcell/s} corresponds to a per-step cost of
+  \SI{0.343}{\milli\second}. A conservative accounting of the memory
+  traffic per step --- two R2C reads of $E$ and $I$ at \SI{4}{MB}
+  each, two pointwise multiplies in the complex domain at
+  approximately \SI{12}{MB} of read+write each, two C2R writes at
+  \SI{4}{MB} each, and the Wilson--Cowan update at \SI{24}{MB} of
+  read+write --- gives roughly \SI{80}{MB} per step, which at
+  \SI{0.343}{\milli\second} corresponds to \SI{233}{GB/s} of effective
+  bandwidth, or about 52\,\% of the \SI{448}{GB/s} theoretical peak.
+  This is in the upper end of what has been published for cuFFT R2C
+  on the RTX 5000 at these sizes~\cite{cufft}. The remaining gap to
+  peak is plausibly explained by sub-peak realized bandwidth on
+  individual cuFFT passes plus the un-fused pointwise kernels between
+  transforms, which is where the next optimization would
+  focus (see section~\ref{sec:future}).
   \item \emph{The 4-GPU parameter sweep achieves near-linear aggregate
-  speedup.} Confirmed by figure~\ref{fig:multigpu}; the deviation
-  from ideal is only a few percent.
+  speedup.} Partially confirmed --- the measured aggregate speedup is
+  $3.22\times$ at $K = 4$ (80\,\% efficiency), which is good but
+  short of the ideal $4\times$. The slowdown is real and it grows
+  with $K$. Section~\ref{sec:results} discusses the host-side
+  contention that explains it.
 \end{enumerate}
 
 \subsection{Unexpected observations}
@@ -545,12 +583,17 @@ the fact that the ``correct answer'' here is visually constrained.
 The fix is a two-line change (commit \texttt{f013b5a}).
 
 A second observation: the throughput curve in
-figure~\ref{fig:throughput} does not grow monotonically past
-$N = 1024$ --- it dips slightly at $N = 2048$ before recovering.
-This is a known cuFFT phenomenon; the internal algorithm choice
-switches from a single Cooley--Tukey pass to a multi-pass schedule
-once the working set exceeds the shared-memory footprint, and the
-transition is not smooth.
+figure~\ref{fig:throughput} is non-monotonic. It rises steeply from
+$N = 128$ to a peak at $N = 512$, then declines slowly. I had
+expected the peak to be at $N = 1024$ or higher, on the assumption
+that the $1024 \times 1024$ working set would best fit the GPU's
+shared-memory and L1 cache budgets. The earlier-than-expected peak
+is a known cuFFT phenomenon: the in-kernel single-pass FFT algorithm
+operates only up to grids that fit in shared memory per
+streaming-multiprocessor, and the transition to a multi-kernel
+out-of-place schedule is paid for at $N = 1024$ and above. The
+relative cost of that transition shrinks as $N$ grows further, which
+is why the decline is gentle rather than catastrophic.
 
 \subsection{Limitations}
 
@@ -576,12 +619,17 @@ transition is not smooth.
 The project demonstrates that a GPU-accelerated Wilson--Cowan
 simulation is straightforward once the FFT-based convolution is in
 place: cuFFT handles the hard part, and the remaining pointwise
-kernels are trivial. Measured throughput on a Quadro RTX 5000 is
-\SI{1.86}{Gcell/s} at $1024^{2}$, and the per-step cost scales as
-$O(N^{2} \log N)$ as predicted. A four-GPU embarrassingly parallel
-parameter sweep achieves near-linear aggregate speedup, which
-justifies the choice of parameter-sweep multi-GPU over domain-
-decomposition multi-GPU for this class of problem at these grid sizes.
+kernels are trivial. Measured peak throughput on a Quadro RTX 5000
+is \SI{3.11}{Gcell/s} at $N = 512$ and \SI{3.06}{Gcell/s} at
+$N = 1024$. The per-step cost scales as $O(N^{2} \log N)$ as
+predicted. A four-GPU embarrassingly parallel parameter sweep on a
+single Frontera RTX node achieves $3.22\times$ aggregate speedup, an
+80\,\% efficiency that is good but lower than the trivial $4\times$
+one might naively expect; the gap is explained by host-side
+contention at startup. The choice of parameter-sweep multi-GPU over
+domain-decomposition multi-GPU is still justified for this class of
+problem at these grid sizes, because domain decomposition would have
+paid PCIe latency on every time step rather than once.
 
 \label{sec:future}
 Three directions for future extension:

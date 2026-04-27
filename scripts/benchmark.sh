@@ -95,9 +95,10 @@ run_parallel() {
   local WALL=$(awk -v a="$T0" -v b="$T1" 'BEGIN { printf "%.6f", b-a }')
 
   # average per-process total time from CSV lines
+  # CSV format: CSV,Nx,Ny,nsteps,total_s,per_step_ms,throughput  -- want $5
   local SUM=0.0
   for lg in "${LOGS[@]}"; do
-    local T=$(grep '^CSV,' "$lg" | awk -F, '{ print $4 }')
+    local T=$(grep '^CSV,' "$lg" | awk -F, '{ print $5 }')
     SUM=$(awk -v s="$SUM" -v t="$T" 'BEGIN { printf "%.6f", s+t }')
   done
   local AVG=$(awk -v s="$SUM" -v k="$K" 'BEGIN { printf "%.6f", s/k }')

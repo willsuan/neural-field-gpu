@@ -38,3 +38,12 @@ smoke_report_*.tar.gz
 .idea/
 *.swp
 *~
+
+# LaTeX build artifacts (PDF is committed at top level; .aux/.bbl etc are not)
+*.aux
+*.bbl
+*.blg
+*.toc
+*.fdb_latexmk
+*.fls
+*.synctex.gz
